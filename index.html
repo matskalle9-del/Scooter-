@@ -1,0 +1,259 @@
+<title>Scooter Bluetooth Test</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: eine schmale Spalte fuers iPhone. Oben Status, dann Aktion, dann gefundene Dienste, unten das Protokoll. */
+:root {
+  --bg: #eef1f2;
+  --surface: #ffffff;
+  --fg: #172225;
+  --muted: #5b6a6e;
+  --line: #d3dadc;
+  --accent: #0a7c78;
+  --accent-fg: #ffffff;
+  --warn: #a35a00;
+  --bad: #b3261e;
+  --good: #1b7a3a;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101a1c; --surface: #172326; --fg: #e6eeef; --muted: #93a5a9; --line: #2a3b3f;
+    --accent: #4fd1c5; --accent-fg: #06201e; --warn: #f0b45a; --bad: #ff8a80; --good: #6fd391;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101a1c; --surface: #172326; --fg: #e6eeef; --muted: #93a5a9; --line: #2a3b3f;
+  --accent: #4fd1c5; --accent-fg: #06201e; --warn: #f0b45a; --bad: #ff8a80; --good: #6fd391;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.4rem; line-height: 1; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; letter-spacing: 0.04em; text-transform: uppercase; margin: 0; color: var(--muted); }
+p { margin: 0; }
+.lead { color: var(--muted); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.status { display: flex; gap: 10px; align-items: flex-start; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); margin-top: 7px; flex: none; }
+.dot.ok { background: var(--good); } .dot.bad { background: var(--bad); } .dot.wait { background: var(--warn); }
+.status strong { display: block; }
+.status span { color: var(--muted); font-size: 0.9rem; }
+button {
+  font: inherit; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--accent); }
+button.small { min-height: 40px; padding: 0 12px; font-size: 0.9rem; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.svc { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.svc:first-of-type { border-top: 0; padding-top: 0; }
+.uuid { font-family: var(--font-mono); font-size: 0.8rem; overflow-wrap: anywhere; }
+.label { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.chr { background: var(--bg); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.props { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-family: var(--font-mono); font-size: 0.72rem; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; color: var(--muted); }
+.val { font-family: var(--font-mono); font-size: 0.85rem; overflow-wrap: anywhere; color: var(--fg); }
+pre#log {
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; margin: 0;
+  background: var(--bg); border-radius: 8px; padding: 12px; max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.note { font-size: 0.9rem; color: var(--muted); }
+.note b { color: var(--fg); font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s; } }
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Scooter Bluetooth Test</h1>
+    <p class="lead">Sucht deinen Ninebot F3 Pro per Bluetooth und zeigt, welche Dienste er anbietet. Die Seite liest nur. Sie schreibt nichts auf den Scooter.</p>
+  </header>
+
+  <section class="panel" aria-live="polite">
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <div><strong id="st-title">Bereit</strong><span id="st-text">Scooter einschalten und in der Nähe halten.</span></div>
+    </div>
+    <div class="row">
+      <button id="scan">Scooter suchen</button>
+      <button id="disc" class="ghost" disabled>Trennen</button>
+    </div>
+    <p class="note" id="env"></p>
+  </section>
+
+  <section class="panel" id="result" hidden>
+    <h2>Gefundene Dienste</h2>
+    <p class="note" id="devname"></p>
+    <div id="services"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Protokoll</h2>
+    <pre id="log">Noch nichts passiert.</pre>
+    <div class="row"><button id="copy" class="ghost small">Protokoll kopieren</button></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var OPTIONAL = [
+    'generic_access', 'generic_attribute', 'device_information', 'battery_service',
+    '6e400001-b5a0-f393-e0a9-e50e24dcca9e',   // Nordic UART, wird von vielen Scootern genutzt
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000fff0-0000-1000-8000-00805f9b34fb',
+    '0000fe95-0000-1000-8000-00805f9b34fb',
+    '0000fee7-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000ae00-0000-1000-8000-00805f9b34fb'
+  ];
+  var $ = function (id) { return document.getElementById(id); };
+  var device = null, lines = [];
+
+  function stamp() { return new Date().toLocaleTimeString('de-DE'); }
+  function log(msg) {
+    lines.push('[' + stamp() + '] ' + msg);
+    $('log').textContent = lines.join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+  function status(kind, title, text) {
+    $('dot').className = 'dot ' + kind;
+    $('st-title').textContent = title;
+    $('st-text').textContent = text || '';
+  }
+  function hex(dv) {
+    var out = [], ascii = '';
+    for (var i = 0; i < dv.byteLength; i++) {
+      var b = dv.getUint8(i);
+      out.push(('0' + b.toString(16)).slice(-2));
+      ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+    }
+    return out.join(' ') + '   |' + ascii + '|';
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  var hasBT = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+  if (!hasBT) {
+    $('scan').disabled = true;
+    status('bad', 'Bluetooth im Browser nicht verfügbar', 'Safari kann das auf dem iPhone nicht. Öffne diese Seite in der App Bluefy.');
+    $('env').innerHTML = '<b>Hinweis:</b> Falls du schon in Bluefy bist und diese Meldung siehst, blockiert die Umgebung den Zugriff. Dann muss die Seite als eigene Datei auf einer https-Adresse liegen.';
+    log('navigator.bluetooth fehlt. Browser: ' + navigator.userAgent);
+  } else {
+    $('env').innerHTML = '<b>Tipp:</b> Schließe die Ninebot-App vollständig, bevor du suchst. Der Scooter nimmt meist nur eine Verbindung gleichzeitig an.';
+    log('Web Bluetooth ist verfügbar.');
+  }
+
+  function renderChar(ch, wrap) {
+    var p = ch.properties, box = el('div', 'chr');
+    box.appendChild(el('div', 'uuid', ch.uuid));
+    var tags = el('div', 'props');
+    ['read', 'write', 'writeWithoutResponse', 'notify', 'indicate'].forEach(function (k) {
+      if (p[k]) tags.appendChild(el('span', 'tag', k));
+    });
+    box.appendChild(tags);
+    var val = el('div', 'val', '');
+    val.hidden = true;
+    var row = el('div', 'row');
+    if (p.read) {
+      var rb = el('button', 'ghost small', 'Lesen');
+      rb.onclick = function () {
+        ch.readValue().then(function (dv) {
+          val.hidden = false; val.textContent = hex(dv);
+          log('Gelesen ' + ch.uuid + ': ' + hex(dv));
+        }).catch(function (e) { log('Lesen fehlgeschlagen (' + ch.uuid + '): ' + e.message); });
+      };
+      row.appendChild(rb);
+    }
+    if (p.notify || p.indicate) {
+      var nb = el('button', 'ghost small', 'Mithören'), on = false;
+      nb.onclick = function () {
+        if (!on) {
+          ch.startNotifications().then(function () {
+            on = true; nb.textContent = 'Stopp';
+            ch.addEventListener('characteristicvaluechanged', function (ev) {
+              val.hidden = false; val.textContent = hex(ev.target.value);
+              log('Meldung ' + ch.uuid + ': ' + hex(ev.target.value));
+            });
+            log('Höre zu auf ' + ch.uuid);
+          }).catch(function (e) { log('Mithören fehlgeschlagen (' + ch.uuid + '): ' + e.message); });
+        } else {
+          ch.stopNotifications().then(function () { on = false; nb.textContent = 'Mithören'; log('Gestoppt: ' + ch.uuid); });
+        }
+      };
+      row.appendChild(nb);
+    }
+    if (row.children.length) box.appendChild(row);
+    box.appendChild(val);
+    wrap.appendChild(box);
+  }
+
+  async function scan() {
+    $('scan').disabled = true;
+    status('wait', 'Suche läuft', 'Wähle deinen Scooter in der Liste aus.');
+    try {
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: OPTIONAL });
+      log('Gewählt: ' + (device.name || '(ohne Namen)') + ' / ' + device.id);
+      device.addEventListener('gattserverdisconnected', function () {
+        status('bad', 'Getrennt', 'Die Verbindung zum Scooter wurde beendet.');
+        $('disc').disabled = true; $('scan').disabled = false;
+        log('Verbindung getrennt.');
+      });
+      status('wait', 'Verbinde …', device.name || 'Unbekanntes Gerät');
+      var server = await device.gatt.connect();
+      log('Verbunden.');
+      var services = await server.getPrimaryServices();
+      log(services.length + ' Dienst(e) gefunden.');
+      $('services').textContent = '';
+      $('devname').textContent = 'Gerät: ' + (device.name || '(ohne Namen)') + '. Es werden nur Dienste angezeigt, die die Seite vorab kennt.';
+      for (var i = 0; i < services.length; i++) {
+        var s = services[i], wrap = el('div', 'svc');
+        wrap.appendChild(el('div', 'label', 'Dienst'));
+        wrap.appendChild(el('div', 'uuid', s.uuid));
+        try {
+          var chars = await s.getCharacteristics();
+          chars.forEach(function (c) { renderChar(c, wrap); });
+          log('Dienst ' + s.uuid + ': ' + chars.length + ' Merkmal(e).');
+        } catch (e) { log('Merkmale von ' + s.uuid + ' nicht lesbar: ' + e.message); }
+        $('services').appendChild(wrap);
+      }
+      $('result').hidden = false;
+      status('ok', 'Verbunden', services.length ? 'Dienste siehe unten.' : 'Keine bekannten Dienste gefunden.');
+      $('disc').disabled = false;
+    } catch (e) {
+      status('bad', 'Nicht verbunden', e.name === 'NotFoundError' ? 'Keine Auswahl getroffen.' : e.message);
+      log('Fehler: ' + e.name + ' – ' + e.message);
+      $('scan').disabled = false;
+    }
+  }
+
+  $('scan').onclick = scan;
+  $('disc').onclick = function () { if (device && device.gatt.connected) device.gatt.disconnect(); };
+  $('copy').onclick = function () {
+    var text = lines.join('\n');
+    var fallback = function () {
+      var r = document.createRange(); r.selectNodeContents($('log'));
+      var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      status('wait', 'Markiert', 'Text markiert, bitte manuell kopieren.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { status('ok', 'Kopiert', 'Das Protokoll liegt in der Zwischenablage.'); }, fallback);
+    } else { fallback(); }
+  };
+})();
+</script>
